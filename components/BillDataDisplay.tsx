@@ -236,7 +236,8 @@ export const BillDataDisplay: React.FC<BillDataDisplayProps> = ({ billData, onUp
                      <div className="mt-6">
                         <h4 className="text-md font-semibold mb-2">Edit Usage Data</h4>
                         <EditableUsageTable 
-                            chartData={chart} 
+                            chartData={chart}
+                            chartIndex={index}
                             onUpdate={(updatedData) => handleTableUpdate(index, updatedData)}
                             verificationQuestions={billData.verificationQuestions}
                         />

@@ -1,14 +1,14 @@
-
 import React, { useState, useEffect } from 'react';
 import type { UsageChartData, VerificationQuestion } from '../types';
 
 interface EditableUsageTableProps {
     chartData: UsageChartData;
+    chartIndex: number;
     verificationQuestions?: VerificationQuestion[];
     onUpdate: (updatedChartData: UsageChartData) => void;
 }
 
-export const EditableUsageTable: React.FC<EditableUsageTableProps> = ({ chartData, verificationQuestions, onUpdate }) => {
+export const EditableUsageTable: React.FC<EditableUsageTableProps> = ({ chartData, chartIndex, verificationQuestions, onUpdate }) => {
     const [localData, setLocalData] = useState(chartData);
 
     useEffect(() => {
@@ -35,14 +35,15 @@ export const EditableUsageTable: React.FC<EditableUsageTableProps> = ({ chartDat
     
     const getVerificationQuestionForField = (monthIndex: number, year: string) => {
         if (!verificationQuestions) return null;
-        // Construct the expected field path
+
         const dataPoint = chartData.data[monthIndex];
+        if (!dataPoint) return null;
+        
         const usageIndex = dataPoint.usage.findIndex(u => u.year === year);
         if (usageIndex === -1) return null;
 
-        // This path is a guess, might need adjustment if schema is complex
-        // Example path: "usageCharts.0.data.3.usage.0.value"
-        const fieldPathPattern = new RegExp(`usageCharts\\.\\d+\\.data\\.${monthIndex}\\.usage\\.${usageIndex}\\.value`);
+        // FIX: Correctly construct the regex to match the nested usage path.
+        const fieldPathPattern = new RegExp(`usageCharts\\.${chartIndex}\\.data\\.${monthIndex}\\.usage\\.${usageIndex}\\.value`);
 
         return verificationQuestions.find(q => fieldPathPattern.test(q.field));
     };
@@ -83,7 +84,7 @@ export const EditableUsageTable: React.FC<EditableUsageTableProps> = ({ chartDat
                                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-500" viewBox="0 0 20 20" fill="currentColor">
                                                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                                     </svg>
-                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 text-xs text-white bg-slate-800 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 text-xs text-white bg-slate-800 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                                                         <span className="font-semibold block">AI Verification Request:</span>
                                                         {verificationQuestion.question}
                                                     </div>

@@ -35,6 +35,7 @@ export const UsageChart: React.FC<UsageChartComponentProps> = ({ chartData, char
         const usageIndex = dataPoint.usage.findIndex(u => u.year === year);
         if (usageIndex === -1) return false;
 
+        // FIX: Ensure the regex pattern correctly matches the nested structure path.
         const fieldPathPattern = new RegExp(`usageCharts\\.${chartIndex}\\.data\\.${monthIndex}\\.usage\\.${usageIndex}\\.value`);
         return verificationQuestions.some(q => fieldPathPattern.test(q.field));
     };
@@ -76,7 +77,7 @@ export const UsageChart: React.FC<UsageChartComponentProps> = ({ chartData, char
                     />
                     <Legend wrapperStyle={{fontSize: "14px"}}/>
                     {years.map((year, yearIndex) => (
-                        <Bar key={year} dataKey={year}>
+                        <Bar key={year} dataKey={year} fill={COLORS[yearIndex % COLORS.length]}>
                             {processedData.map((entry, entryIndex) => (
                                 <Cell
                                     key={`cell-${entryIndex}`}

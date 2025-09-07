@@ -56,7 +56,7 @@ const billSchema = {
         type: Type.ARRAY, description: "If you are uncertain about a specific value due to blurriness or ambiguity, create a question for the user to verify it. Only create questions for critical data points you are unsure about.",
         items: {
             type: Type.OBJECT, properties: {
-                field: { type: Type.STRING, description: "A dot-notation path to the uncertain field (e.g., 'usageCharts.0.data.3.value')." },
+                field: { type: Type.STRING, description: "A dot-notation path to the uncertain field (e.g., 'usageCharts.0.data.3.usage.0.value')." },
                 question: { type: Type.STRING, description: "A clear, simple question for the user (e.g., 'Is the usage for Sep 2017 approximately 120 kWh? The bar is blurry.')." }
             }, required: ["field", "question"]
         }
@@ -71,10 +71,21 @@ const prompt = `You are a world-class OCR system specializing in analyzing utili
 **Core Instructions:**
 1.  **Analyze Image**: Scrutinize the provided utility bill image.
 2.  **Strict JSON Output**: Your entire response MUST be a single, raw JSON object that conforms to the provided schema. Do not include any introductory text, explanations, or markdown formatting like \`\`\`json.
-3.  **Chart Data Estimation**: If bar charts or graphs are present, meticulously estimate the values from the bar heights relative to the y-axis, even if exact numbers aren't printed on the bars.
-4.  **Confidence Assessment**: Provide a \`confidenceScore\` (0.0-1.0) and a detailed \`confidenceReasoning\`. Be explicit about what parts of the image (e.g., "the line items section", "the top-right corner with the date") were difficult to read and why (e.g., "due to a camera flash glare", "text is pixelated").
-5.  **User Verification**: If you are uncertain about any specific, critical data point (like a charge amount or a usage bar), generate a clear \`verificationQuestions\` item for it. This is your chance to ask the user for help. For instance, if a bar in a chart is blurry, ask "Is the usage for [Month Year] approximately [Your Best Guess]? The bar is hard to read."
-6.  **Completeness**: Ensure every required field in the schema is present. If an optional field (like \`accountName\`) is not found, omit it from the final JSON.`;
+3.  **Chart Data Extraction (Crucial)**: Bar charts often show usage for multiple years for the same month. You MUST extract the data for each year. For each month, the 'usage' property must be an array of objects, one for each year.
+    **Example of correct nested structure for a single month:**
+    \`\`\`json
+    {
+      "month": "Oct",
+      "usage": [
+        { "year": "2016", "value": 1400 },
+        { "year": "2017", "value": 1350 }
+      ]
+    }
+    \`\`\`
+4.  **Value Estimation**: If bar charts are present, meticulously estimate the values from the bar heights relative to the y-axis, even if exact numbers aren't printed on the bars.
+5.  **Confidence Assessment**: Provide a \`confidenceScore\` (0.0-1.0) and a detailed \`confidenceReasoning\`. Be explicit about what parts of the image (e.g., "the line items section", "the top-right corner with the date") were difficult to read and why (e.g., "due to a camera flash glare", "text is pixelated").
+6.  **User Verification**: If you are uncertain about any specific, critical data point (like a charge amount or a usage bar), generate a clear \`verificationQuestions\` item for it. Use the correct nested path for the field (e.g., 'usageCharts.0.data.3.usage.0.value').
+7.  **Completeness**: Ensure every required field in the schema is present. If an optional field (like \`accountName\`) is not found, omit it from the final JSON.`;
 
 type BillDataSansId = Omit<BillData, 'id' | 'analyzedAt'>;
 interface AnalysisResult {
@@ -98,17 +109,26 @@ const getValidatedOllamaUrl = (baseUrl: string, path: string): string => {
 };
 
 const sanitizeAiResponse = (rawJson: any): Partial<BillData> => {
-    if (typeof rawJson !== 'object' || rawJson === null) {
+    // FIX: AI can sometimes wrap the response in a 'properties' object. Handle this.
+    const sourceData = rawJson.properties && typeof rawJson.properties === 'object' ? rawJson.properties : rawJson;
+
+    if (typeof sourceData !== 'object' || sourceData === null) {
         return {}; // Return empty object if response is not a valid object
     }
+
     const sanitized: any = {};
     const keyMap: { [key: string]: string[] } = {
+        accountName: ['account_name'],
         accountNumber: ['account_number', 'invoice_number', 'account_no'],
         totalCurrentCharges: ['total_current_charges', 'total_due', 'amount_due', 'total', 'charges'],
         statementDate: ['statement_date', 'bill_date', 'invoice_date'],
         dueDate: ['due_date', 'payment_due'],
+        serviceAddress: ['service_address'],
         lineItems: ['line_items', 'charges_details', 'breakdown'],
         usageCharts: ['usage_charts', 'usage_history', 'graphs'],
+        confidenceScore: ['confidence_score'],
+        confidenceReasoning: ['confidence_reasoning'],
+        verificationQuestions: ['verification_questions'],
     };
 
     const findValue = (obj: any, primaryKey: string, alternatives: string[]): any => {
@@ -124,18 +144,50 @@ const sanitizeAiResponse = (rawJson: any): Partial<BillData> => {
 
     // Map known keys using primary and alternative names
     for (const key in keyMap) {
-        const value = findValue(rawJson, key, keyMap[key]);
+        const value = findValue(sourceData, key, keyMap[key]);
         if (value !== undefined) {
             sanitized[key] = value;
         }
     }
     
     // Copy over any other keys that might exist and match the schema directly
-    // This allows fields like `accountName`, `serviceAddress` to pass through if named correctly
-    for (const key in rawJson) {
+    for (const key in sourceData) {
         if (!sanitized.hasOwnProperty(key) && billSchema.properties.hasOwnProperty(key)) {
-            sanitized[key] = rawJson[key];
+            sanitized[key] = sourceData[key];
         }
+    }
+    
+    // FIX: Add robust transformation for usage chart data to handle flat or incorrect structures from the AI.
+    if (Array.isArray(sanitized.usageCharts)) {
+        sanitized.usageCharts = sanitized.usageCharts.map((chart: any) => {
+            if (!chart.data || !Array.isArray(chart.data)) return {...chart, data: []};
+            
+            // Check if the data is already in the correct nested format
+            const isNested = chart.data.every((d: any) => d.month && Array.isArray(d.usage));
+            if(isNested) return chart;
+            
+            // If not nested, transform it.
+            const monthMap: { [key: string]: { month: string, usage: { year: string, value: number }[] } } = {};
+            
+            for (const flatPoint of chart.data) {
+                if (!flatPoint.month || typeof flatPoint.month !== 'string' || flatPoint.value === undefined) {
+                    continue; // Skip malformed data points
+                }
+
+                // Attempt to parse "Month, Year" or "Month Year"
+                const match = flatPoint.month.match(/([a-zA-Z]{3,})\.?\s*,?\s*(\d{4})/);
+                if (match) {
+                    const month = match[1];
+                    const year = match[2];
+                    
+                    if (!monthMap[month]) {
+                        monthMap[month] = { month, usage: [] };
+                    }
+                    monthMap[month].usage.push({ year, value: parseFloat(String(flatPoint.value)) || 0 });
+                }
+            }
+            return { ...chart, data: Object.values(monthMap) };
+        });
     }
 
     // Ensure required fields and arrays have safe default values to prevent crashes
