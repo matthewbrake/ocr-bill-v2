@@ -97,6 +97,60 @@ const getValidatedOllamaUrl = (baseUrl: string, path: string): string => {
     }
 };
 
+const sanitizeAiResponse = (rawJson: any): Partial<BillData> => {
+    if (typeof rawJson !== 'object' || rawJson === null) {
+        return {}; // Return empty object if response is not a valid object
+    }
+    const sanitized: any = {};
+    const keyMap: { [key: string]: string[] } = {
+        accountNumber: ['account_number', 'invoice_number', 'account_no'],
+        totalCurrentCharges: ['total_current_charges', 'total_due', 'amount_due', 'total', 'charges'],
+        statementDate: ['statement_date', 'bill_date', 'invoice_date'],
+        dueDate: ['due_date', 'payment_due'],
+        lineItems: ['line_items', 'charges_details', 'breakdown'],
+        usageCharts: ['usage_charts', 'usage_history', 'graphs'],
+    };
+
+    const findValue = (obj: any, primaryKey: string, alternatives: string[]): any => {
+        const keysToSearch = [primaryKey, ...alternatives];
+        for (const key of keysToSearch) {
+            const actualKey = Object.keys(obj).find(k => k.toLowerCase().replace(/_/g, '') === key.toLowerCase().replace(/_/g, ''));
+            if (actualKey && obj[actualKey] !== undefined) {
+                return obj[actualKey];
+            }
+        }
+        return undefined;
+    };
+
+    // Map known keys using primary and alternative names
+    for (const key in keyMap) {
+        const value = findValue(rawJson, key, keyMap[key]);
+        if (value !== undefined) {
+            sanitized[key] = value;
+        }
+    }
+    
+    // Copy over any other keys that might exist and match the schema directly
+    // This allows fields like `accountName`, `serviceAddress` to pass through if named correctly
+    for (const key in rawJson) {
+        if (!sanitized.hasOwnProperty(key) && billSchema.properties.hasOwnProperty(key)) {
+            sanitized[key] = rawJson[key];
+        }
+    }
+
+    // Ensure required fields and arrays have safe default values to prevent crashes
+    sanitized.accountNumber = sanitized.accountNumber ?? 'N/A';
+    sanitized.totalCurrentCharges = sanitized.totalCurrentCharges ?? 0;
+    sanitized.confidenceScore = sanitized.confidenceScore ?? 0.5;
+    sanitized.confidenceReasoning = sanitized.confidenceReasoning ?? 'Confidence not provided by AI. Please verify data.';
+    sanitized.lineItems = Array.isArray(sanitized.lineItems) ? sanitized.lineItems : [];
+    sanitized.usageCharts = Array.isArray(sanitized.usageCharts) ? sanitized.usageCharts : [];
+    sanitized.verificationQuestions = Array.isArray(sanitized.verificationQuestions) ? sanitized.verificationQuestions : [];
+
+    return sanitized;
+};
+
+
 const postProcessData = (parsedData: any): BillDataSansId => {
     if (typeof parsedData.totalCurrentCharges === 'string') {
         parsedData.totalCurrentCharges = parseFloat(parsedData.totalCurrentCharges.replace(/[^0-9.-]+/g,""));
@@ -158,8 +212,9 @@ const callGemini = async (imageB64: string, addLog: Function): Promise<AnalysisR
         addLog('DEBUG', 'Gemini Raw Response:', jsonText);
 
         const parsedJson = JSON.parse(jsonText);
-        addLog('INFO', 'Successfully parsed Gemini response.', parsedJson);
-        const parsedData = postProcessData(parsedJson);
+        const sanitizedJson = sanitizeAiResponse(parsedJson);
+        addLog('INFO', 'Successfully parsed & sanitized Gemini response.', sanitizedJson);
+        const parsedData = postProcessData(sanitizedJson);
         return { parsedData, rawResponse: jsonText };
     } catch (error) {
         addLog('ERROR', 'Gemini API Error:', error);
@@ -230,8 +285,9 @@ JSON Schema: ${JSON.stringify(billSchema)}`;
         addLog('DEBUG', 'Ollama Raw Response:', responseData);
         const jsonText = responseData.choices[0].message.content;
         const parsedJson = JSON.parse(jsonText);
-        addLog('INFO', 'Successfully parsed Ollama response.', parsedJson);
-        const parsedData = postProcessData(parsedJson);
+        const sanitizedJson = sanitizeAiResponse(parsedJson);
+        addLog('INFO', 'Successfully parsed & sanitized Ollama response.', sanitizedJson);
+        const parsedData = postProcessData(sanitizedJson);
         return { parsedData, rawResponse: jsonText };
 
     } catch (error) {

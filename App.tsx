@@ -13,6 +13,7 @@ import { BillDataDisplay } from './components/BillDataDisplay';
 import { Settings } from './components/Settings';
 import { HistoryList } from './components/HistoryList';
 import { DebugLog } from './components/DebugLog';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const App: React.FC = () => {
     const [settings, saveSettings] = useAiSettings();
@@ -173,33 +174,35 @@ const App: React.FC = () => {
                 </aside>
                 
                 <main className="flex-grow p-4 sm:p-6 lg:p-8 relative">
-                    {isLoading && <Loader message="Analyzing your bill..." />}
-                    
-                    {error && !isLoading && (
-                        <div className="max-w-4xl mx-auto">
-                            <ErrorMessage message={error} onRetry={capturedImage ? handleAnalyzeBill : resetState} />
-                        </div>
-                    )}
-
-                    {!billData && !capturedImage && !isLoading && <Welcome />}
-
-                    {billData && !isLoading && <BillDataDisplay billData={billData} onUpdate={handleBillDataUpdate} />}
-
-                    {capturedImage && !billData && !isLoading && (
-                        <div className="max-w-4xl mx-auto text-center">
-                            <h2 className="text-2xl font-bold mb-4">Image Ready for Analysis</h2>
-                            <p className="text-slate-500 dark:text-slate-400 mb-4">Your image has been loaded. Click the button below to start the AI analysis.</p>
-                            <img src={capturedImage} alt="Captured bill" className="max-w-full max-h-[50vh] mx-auto rounded-lg shadow-lg mb-6" />
-                            <div className="flex justify-center space-x-4">
-                                <button onClick={resetState} className="px-6 py-2 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md font-semibold hover:bg-slate-50 dark:hover:bg-slate-600">
-                                    Cancel
-                                </button>
-                                <button onClick={handleAnalyzeBill} className="px-6 py-2 text-white bg-sky-600 rounded-md font-semibold hover:bg-sky-700">
-                                    Analyze Bill
-                                </button>
+                    <ErrorBoundary>
+                        {isLoading && <Loader message="Analyzing your bill..." />}
+                        
+                        {error && !isLoading && (
+                            <div className="max-w-4xl mx-auto">
+                                <ErrorMessage message={error} onRetry={capturedImage ? handleAnalyzeBill : resetState} />
                             </div>
-                        </div>
-                    )}
+                        )}
+
+                        {!billData && !capturedImage && !isLoading && <Welcome />}
+
+                        {billData && !isLoading && <BillDataDisplay billData={billData} onUpdate={handleBillDataUpdate} />}
+
+                        {capturedImage && !billData && !isLoading && (
+                            <div className="max-w-4xl mx-auto text-center">
+                                <h2 className="text-2xl font-bold mb-4">Image Ready for Analysis</h2>
+                                <p className="text-slate-500 dark:text-slate-400 mb-4">Your image has been loaded. Click the button below to start the AI analysis.</p>
+                                <img src={capturedImage} alt="Captured bill" className="max-w-full max-h-[50vh] mx-auto rounded-lg shadow-lg mb-6" />
+                                <div className="flex justify-center space-x-4">
+                                    <button onClick={resetState} className="px-6 py-2 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md font-semibold hover:bg-slate-50 dark:hover:bg-slate-600">
+                                        Cancel
+                                    </button>
+                                    <button onClick={handleAnalyzeBill} className="px-6 py-2 text-white bg-sky-600 rounded-md font-semibold hover:bg-sky-700">
+                                        Analyze Bill
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </ErrorBoundary>
                 </main>
             </div>
             

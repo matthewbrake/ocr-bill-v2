@@ -5,7 +5,7 @@ const path = require('path');
 const isProduction = process.env.NODE_ENV === 'production';
 
 esbuild.build({
-  entryPoints: ['src/index.tsx'],
+  entryPoints: ['index.tsx'],
   bundle: true,
   outfile: 'dist/index.js',
   sourcemap: !isProduction,
