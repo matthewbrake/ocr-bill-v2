@@ -228,7 +228,11 @@ export const BillDataDisplay: React.FC<BillDataDisplayProps> = ({ billData, onUp
                             <span>Export CSV</span>
                         </button>
                     </div>
-                     <UsageChart chartData={chart} />
+                     <UsageChart 
+                        chartData={chart}
+                        chartIndex={index}
+                        verificationQuestions={billData.verificationQuestions}
+                     />
                      <div className="mt-6">
                         <h4 className="text-md font-semibold mb-2">Edit Usage Data</h4>
                         <EditableUsageTable 
@@ -239,6 +243,22 @@ export const BillDataDisplay: React.FC<BillDataDisplayProps> = ({ billData, onUp
                      </div>
                  </div>
             ))}
+
+            {/* Raw Data Viewer */}
+            {billData.rawResponse && (
+                <div className="mt-8 no-print">
+                    <details className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+                        <summary className="cursor-pointer p-4 font-semibold text-slate-700 dark:text-slate-200">
+                            View Raw AI Data
+                        </summary>
+                        <div className="p-4 border-t border-slate-200 dark:border-slate-700">
+                            <pre className="text-xs bg-slate-100 dark:bg-slate-900 p-4 rounded-md overflow-x-auto custom-scrollbar">
+                                {JSON.stringify(JSON.parse(billData.rawResponse), null, 2)}
+                            </pre>
+                        </div>
+                    </details>
+                </div>
+            )}
         </div>
     );
 };

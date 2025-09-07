@@ -72,13 +72,19 @@ npm run build
 
 ### 5. Serve the Application
 
-We'll use the `serve` package for a simple but effective local server.
+We use the `serve` package for a simple but effective local server.
 
+**To run on the default port (3000):**
 ```bash
 npm start
 ```
 
-Your AI Bill Analyzer is now running at `http://localhost:3000`.
+**To specify a custom port (e.g., 5000):**
+```bash
+npm start -- -l 5000
+```
+
+Your AI Bill Analyzer is now running. Open your browser to the specified address (e.g., `http://localhost:3000` or `http://localhost:5000`).
 
 ---
 

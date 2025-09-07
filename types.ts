@@ -49,6 +49,7 @@ export interface BillData {
   confidenceScore: number;
   confidenceReasoning: string;
   verificationQuestions?: VerificationQuestion[];
+  rawResponse?: string;
 }
 
 export interface OllamaModel {

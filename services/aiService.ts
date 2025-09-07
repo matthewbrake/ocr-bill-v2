@@ -77,6 +77,25 @@ const prompt = `You are a world-class OCR system specializing in analyzing utili
 6.  **Completeness**: Ensure every required field in the schema is present. If an optional field (like \`accountName\`) is not found, omit it from the final JSON.`;
 
 type BillDataSansId = Omit<BillData, 'id' | 'analyzedAt'>;
+interface AnalysisResult {
+    parsedData: BillDataSansId;
+    rawResponse: string;
+}
+
+// FIX: Add helper function to validate and construct Ollama URLs, providing clearer errors.
+const getValidatedOllamaUrl = (baseUrl: string, path: string): string => {
+    try {
+        // Ensure the base URL has a protocol, which is a common user error.
+        if (!/^(https?|ftp):\/\//i.test(baseUrl)) {
+             throw new Error("URL is missing a protocol (e.g., http:// or https://).");
+        }
+        const url = new URL(path, baseUrl);
+        return url.toString();
+    } catch (error) {
+        console.error("Invalid Ollama URL provided:", error);
+        throw new Error(`The Ollama URL "${baseUrl}" is invalid. Please check the format and try again.`);
+    }
+};
 
 const postProcessData = (parsedData: any): BillDataSansId => {
     if (typeof parsedData.totalCurrentCharges === 'string') {
@@ -110,8 +129,7 @@ const postProcessData = (parsedData: any): BillDataSansId => {
 
 // --- Gemini Provider ---
 
-// FIX: Refactor to remove apiKey parameter and use process.env.API_KEY directly as per guidelines.
-const callGemini = async (imageB64: string, addLog: Function): Promise<BillDataSansId> => {
+const callGemini = async (imageB64: string, addLog: Function): Promise<AnalysisResult> => {
     addLog('INFO', 'Starting bill analysis with Gemini...');
     
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -139,9 +157,10 @@ const callGemini = async (imageB64: string, addLog: Function): Promise<BillDataS
         const jsonText = response.text.trim();
         addLog('DEBUG', 'Gemini Raw Response:', jsonText);
 
-        const parsedData = JSON.parse(jsonText);
-        addLog('INFO', 'Successfully parsed Gemini response.', parsedData);
-        return postProcessData(parsedData);
+        const parsedJson = JSON.parse(jsonText);
+        addLog('INFO', 'Successfully parsed Gemini response.', parsedJson);
+        const parsedData = postProcessData(parsedJson);
+        return { parsedData, rawResponse: jsonText };
     } catch (error) {
         addLog('ERROR', 'Gemini API Error:', error);
         console.error("Gemini API Error:", error);
@@ -151,7 +170,7 @@ const callGemini = async (imageB64: string, addLog: Function): Promise<BillDataS
 
 // --- Ollama Provider ---
 
-const callOllama = async (imageB64: string, url: string, model: string, addLog: Function): Promise<BillDataSansId> => {
+const callOllama = async (imageB64: string, url: string, model: string, addLog: Function): Promise<AnalysisResult> => {
     if (!url || !model) {
         addLog('ERROR', 'Ollama URL or model is not configured.');
         throw new Error("Ollama URL or model is not configured. Please add it in the settings.");
@@ -162,6 +181,16 @@ const callOllama = async (imageB64: string, url: string, model: string, addLog: 
 
 User Request: ${prompt}
 JSON Schema: ${JSON.stringify(billSchema)}`;
+
+    let endpoint: string;
+    try {
+        // FIX: Use URL validator for a better error message on malformed URLs.
+        endpoint = getValidatedOllamaUrl(url, "/v1/chat/completions");
+    } catch (error) {
+        addLog('ERROR', 'Invalid Ollama URL in settings', { url, error });
+        if (error instanceof Error) throw error;
+        throw new Error("An unknown error occurred during Ollama URL validation.");
+    }
 
     try {
         const requestBody = {
@@ -181,7 +210,6 @@ JSON Schema: ${JSON.stringify(billSchema)}`;
                 }
             ],
         };
-        const endpoint = new URL("/v1/chat/completions", url).toString();
         addLog('DEBUG', `Ollama Request to ${endpoint}`, requestBody);
 
 
@@ -201,20 +229,24 @@ JSON Schema: ${JSON.stringify(billSchema)}`;
         const responseData = await response.json();
         addLog('DEBUG', 'Ollama Raw Response:', responseData);
         const jsonText = responseData.choices[0].message.content;
-        const parsedData = JSON.parse(jsonText);
-        addLog('INFO', 'Successfully parsed Ollama response.', parsedData);
-        return postProcessData(parsedData);
+        const parsedJson = JSON.parse(jsonText);
+        addLog('INFO', 'Successfully parsed Ollama response.', parsedJson);
+        const parsedData = postProcessData(parsedJson);
+        return { parsedData, rawResponse: jsonText };
 
     } catch (error) {
         addLog('ERROR', 'Ollama Request Error:', error);
         console.error("Ollama Request Error:", error);
         if (error instanceof TypeError) {
-             throw new Error("Could not connect to the Ollama server. Please ensure the server is running, the URL is correct, and CORS is enabled (e.g., set OLLAMA_ORIGINS='*'). See the browser's developer console for more details.");
+             // FIX: Refine error message to be more specific about CORS.
+             throw new Error("Could not connect to the Ollama server. This is often a network or CORS issue. Please ensure: 1) The server is running. 2) The URL is correct. 3) CORS is enabled on the Ollama server (e.g., set OLLAMA_ORIGINS='*').");
         }
         if (error instanceof SyntaxError) {
             throw new Error("Ollama returned invalid JSON. The model may not have followed instructions. Check the debug log.");
         }
-        throw error;
+        // Re-throw custom errors (like from URL validation) or other unexpected errors.
+        if (error instanceof Error) throw error;
+        throw new Error("An unknown error occurred while communicating with Ollama.");
     }
 };
 
@@ -223,12 +255,23 @@ export const fetchOllamaModels = async (url: string, addLog: Function): Promise<
         throw new Error("Ollama URL is not provided.");
     }
     addLog('INFO', `Fetching models from Ollama at ${url}`);
+    
+    let endpoint: string;
     try {
-        const response = await fetch(new URL("/api/tags", url).toString());
+        // FIX: Use URL validator for a better error message on malformed URLs.
+        endpoint = getValidatedOllamaUrl(url, "/api/tags");
+    } catch (error) {
+        addLog('ERROR', 'Invalid Ollama URL in settings', { url, error });
+        if (error instanceof Error) throw error;
+        throw new Error("An unknown error occurred during Ollama URL validation.");
+    }
+
+    try {
+        const response = await fetch(endpoint);
         if (!response.ok) {
             const errorBody = await response.text();
             addLog('ERROR', `Failed to fetch Ollama models (${response.status})`, errorBody);
-            throw new Error(`Failed to fetch models: ${response.statusText}`);
+            throw new Error(`Failed to fetch models: ${response.statusText}. The server responded with status ${response.status}.`);
         }
         const data = await response.json();
         addLog('DEBUG', 'Ollama models fetched successfully.', data.models);
@@ -236,8 +279,13 @@ export const fetchOllamaModels = async (url: string, addLog: Function): Promise<
     } catch (error) {
         addLog('ERROR', 'Error fetching Ollama models:', error);
         console.error("Error fetching Ollama models:", error);
-        if (error instanceof TypeError) { // "Failed to fetch"
-            throw new Error("Could not connect to the Ollama server. Please ensure the server is running, the URL is correct, and CORS is enabled (e.g., set OLLAMA_ORIGINS='*'). See the browser's developer console for more details.");
+        if (error instanceof TypeError) { // "Failed to fetch" is a TypeError
+             // FIX: Refine error message to be more specific about CORS.
+            throw new Error("Could not connect to the Ollama server. This is often a network or CORS issue. Please ensure: 1) The server is running. 2) The URL is correct. 3) CORS is enabled on the Ollama server (e.g., set OLLAMA_ORIGINS='*').");
+        }
+        // Re-throw other errors (like from !response.ok or URL validation)
+        if (error instanceof Error) {
+            throw error;
         }
         throw new Error("An unexpected error occurred while fetching Ollama models. Check the debug log.");
     }
@@ -246,10 +294,9 @@ export const fetchOllamaModels = async (url: string, addLog: Function): Promise<
 
 // --- Main Service Function ---
 
-export const analyzeBill = async (imageB64: string, settings: AiSettings, addLog: Function): Promise<BillDataSansId> => {
+export const analyzeBill = async (imageB64: string, settings: AiSettings, addLog: Function): Promise<AnalysisResult> => {
     switch (settings.provider) {
         case 'gemini':
-            // FIX: Update call to callGemini to reflect new signature (no API key).
             return callGemini(imageB64, addLog);
         case 'ollama':
             return callOllama(imageB64, settings.ollamaUrl, settings.ollamaModel, addLog);

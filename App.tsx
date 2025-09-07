@@ -96,11 +96,12 @@ const App: React.FC = () => {
         addLog('INFO', 'Starting bill analysis...');
 
         try {
-            const result = await analyzeBill(capturedImage, settings, addLog);
+            const { parsedData, rawResponse } = await analyzeBill(capturedImage, settings, addLog);
             const newBill: BillData = {
-                ...result,
+                ...parsedData,
                 id: `bill-${Date.now()}`,
                 analyzedAt: new Date().toISOString(),
+                rawResponse: rawResponse,
             };
             setBillData(newBill);
             setHistory(prev => [newBill, ...prev.slice(0, 19)]); // Keep last 20

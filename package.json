@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "build": "node esbuild.config.js",
-    "start": "serve -s dist -l 3000"
+    "start": "serve -s dist"
   },
   "dependencies": {
     "@google/genai": "^1.16.0",
