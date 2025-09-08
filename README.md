@@ -88,6 +88,30 @@ Your AI Bill Analyzer is now running. Open your browser to the specified address
 
 ---
 
+## Updating the Application
+
+To update your local application to the latest version, you can pull the changes from the repository and rebuild the project.
+
+### Quick Update Command
+
+Run the following command from the project's root directory. This will download the latest code, install any new dependencies, and rebuild the application files.
+
+```bash
+git pull && npm install && npm run build
+```
+
+After the command completes successfully, you can start the server with the latest version:
+
+```bash
+# Start on the default port (3000)
+npm start
+
+# Or on a custom port (e.g., 5000)
+npm start -- -l 5000
+```
+
+---
+
 ## Deployment with Docker
 
 Containerizing the application is the recommended way to deploy it in production.
