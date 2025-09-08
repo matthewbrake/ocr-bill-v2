@@ -66,13 +66,25 @@ export const billSchema = {
 
 export const prompt = `You are an expert OCR system specializing in utility bills. Your task is to extract information from the provided image and respond ONLY with a single, raw JSON object that conforms to the schema. Do not include any other text, explanations, or markdown.
 
-**Extraction Steps:**
-1.  **Extract Key Details**: Find the account number, total current charges, statement date, and other primary details.
-2.  **Find ALL Usage Charts**: The bill may have multiple charts (e.g., for electricity and water). You MUST find and extract data for all of them.
-3.  **Extract Chart Data**: For each chart, extract the title, unit, and all monthly data points. Bar charts often show usage for multiple years for the same month. You MUST extract the data for each year as a nested object.
-    - **Correct nested 'usage' example**: \`"usage": [{ "year": "2016", "value": 1400 }, { "year": "2017", "value": 1350 }]\`
-4.  **Extract Line Items**: List all individual charges and credits from the bill summary.
-5.  **Assess Confidence**: Provide a \`confidenceScore\` (0.0-1.0) and a detailed \`confidenceReasoning\`, mentioning any specific parts of the bill that were hard to read.
-6.  **Create Verification Questions**: If you are uncertain about any specific value, create an item in the \`verificationQuestions\` array with the field path and a clear question for the user.
+**Critical Thinking Process:**
 
-Your final output must be nothing but the JSON object.`;
+1.  **Initial Scan**: First, scan the entire bill to identify all major sections: Account Details, "Here's what you owe" summary, and Usage Charts ("YOUR ELECTRICITY USE AT A GLANCE", "YOUR WATER USE AT A GLANCE").
+
+2.  **Line Item Analysis (Crucial for Accuracy)**:
+    *   Locate the "Here's what you owe" section.
+    *   Identify all charge descriptions and their amounts.
+    *   **IMPORTANT**: Most line items represent charges and MUST be POSITIVE numbers (e.g., 'GST', 'Water/wastewater', 'Drainage services').
+    *   Look for specific keywords like 'Payments' or 'Credit'. ONLY these line items should be represented with a NEGATIVE number. In the provided example, "Payments" is clearly shown with a minus sign.
+    *   The sum of these line items should roughly equal the "New charges" or be related to the "Amount of your last bill" and "Total". Use this to self-correct the signs of the amounts.
+
+3.  **Usage Chart Extraction**:
+    *   For EACH chart found, identify the title (e.g., "YOUR ELECTRICITY USE AT A GLANCE"), the unit on the Y-axis (e.g., 'kWh', 'm³'), and the years shown in the legend (e.g., '2015/2016', '2016/2017').
+    *   For each month on the X-axis (e.g., 'Oct', 'Nov'), meticulously estimate the value for EACH bar corresponding to a year.
+    *   Construct the nested 'usage' array correctly. For 'Oct', it should have two entries: one for '2016' and one for '2017'.
+
+4.  **Confidence & Verification**:
+    *   Based on image clarity (blurriness, glare, skew), determine a \`confidenceScore\`.
+    *   Provide clear \`confidenceReasoning\`. Be specific about which parts were difficult to read.
+    *   If a specific number (e.g., a bar height on a chart, a digit in a line item amount) is ambiguous, create a \`verificationQuestions\` item for it. Use a clear, simple question and the exact dot-notation path to the field.
+
+5.  **Final JSON Assembly**: Compile all extracted data into a single JSON object that strictly adheres to the schema. Omit any optional fields that are not present on the bill. Ensure the entire output is only the raw JSON.`;

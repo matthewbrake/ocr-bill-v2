@@ -185,7 +185,7 @@ const App: React.FC = () => {
 
                         {!billData && !capturedImage && !isLoading && <Welcome />}
 
-                        {billData && !isLoading && <BillDataDisplay billData={billData} onUpdate={handleBillDataUpdate} />}
+                        {billData && !isLoading && <BillDataDisplay billData={billData} onUpdate={handleBillDataUpdate} onAnalyzeNew={resetState} />}
 
                         {capturedImage && !billData && !isLoading && (
                             <div className="max-w-4xl mx-auto text-center">
@@ -206,13 +206,15 @@ const App: React.FC = () => {
                 </main>
             </div>
             
-            <footer className="sticky bottom-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 p-4 no-print z-20">
-                <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-4">
-                    <FileUpload onFileUpload={handleFileUpload} disabled={isLoading} />
-                    <div className="text-sm text-slate-400">OR</div>
-                    <CameraCapture onCapture={handleCameraCapture} disabled={isLoading} />
-                </div>
-            </footer>
+            {!billData && !capturedImage && (
+                <footer className="sticky bottom-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 p-4 no-print z-20">
+                    <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-4">
+                        <FileUpload onFileUpload={handleFileUpload} disabled={isLoading} />
+                        <div className="text-sm text-slate-400">OR</div>
+                        <CameraCapture onCapture={handleCameraCapture} disabled={isLoading} />
+                    </div>
+                </footer>
+            )}
             
             <DebugLog logs={logs} isVisible={showDebugLog} />
         </div>

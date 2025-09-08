@@ -7,6 +7,7 @@ import { EditableUsageTable } from './EditableUsageTable';
 interface BillDataDisplayProps {
     billData: BillData;
     onUpdate: (updatedBillData: BillData) => void;
+    onAnalyzeNew: () => void;
 }
 
 const InfoField: React.FC<{ label: string; value?: string }> = ({ label, value }) => (
@@ -34,7 +35,7 @@ const ConfidenceMeter: React.FC<{ score: number }> = ({ score }) => {
     );
 };
 
-export const BillDataDisplay: React.FC<BillDataDisplayProps> = ({ billData, onUpdate }) => {
+export const BillDataDisplay: React.FC<BillDataDisplayProps> = ({ billData, onUpdate, onAnalyzeNew }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitMessage, setSubmitMessage] = useState('');
@@ -115,6 +116,12 @@ export const BillDataDisplay: React.FC<BillDataDisplayProps> = ({ billData, onUp
                     <p className="text-slate-500 dark:text-slate-400">Analyzed on: {new Date(billData.analyzedAt).toLocaleString()}</p>
                 </div>
                 <div className="no-print flex items-center gap-2">
+                     <button onClick={onAnalyzeNew} className="flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-slate-600 border border-transparent rounded-md shadow-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500">
+                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 mr-2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                         </svg>
+                        Analyze New Bill
+                    </button>
                      <button onClick={handleFormspreeSubmit} disabled={isSubmitting || !process.env.FORMSPREE_FORM_ID} className="flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-sky-600 border border-transparent rounded-md shadow-sm hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 disabled:bg-slate-400 disabled:cursor-not-allowed">
                         {renderSubmitButtonContent()}
                     </button>
